@@ -1,0 +1,29 @@
+stages:
+  - build
+
+build job:
+  stage: build
+  image: docker
+  variables:
+    IMAGE_NAME: $CI_REGISTRY_IMAGE
+    LOGIN: $GITLAB_LOGIN
+    TOKEN: $PRIVATE_TOKEN
+  services:
+    - docker:dind
+  script:
+    - docker login -u $GITLAB_LOGIN -p $PRIVATE_TOKEN registry.gitlab.com
+    - docker build -t ${IMAGE_NAME}:latest . -f Dockerfile
+    - docker push ${IMAGE_NAME}:latest
+    - docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
+    - docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
+    - |
+      if [[ ! -z "$CI_COMMIT_TAG" ]]; then
+        docker tag ${IMAGE_NAME}:latest  ${IMAGE_NAME}:${CI_COMMIT_TAG} 
+        docker push ${IMAGE_NAME}:${CI_COMMIT_TAG}
+      fi
+  tags:
+    - docker
+  only:
+    refs:
+      - main
+      - tags
