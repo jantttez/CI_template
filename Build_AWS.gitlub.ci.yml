@@ -1,0 +1,36 @@
+stages:
+  - build
+
+build-job:
+  stage: build
+  image: docker
+  services:
+    - docker:dind
+  variables:
+    GITLABREPO: $GITLABREPO
+    ACCESS_KEY: $AWS_ACCESS_KEY
+    SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    LOGIN: $GITLAB_LOGIN
+    PASSWORD: $PRIVATE_TOKEN
+    CLUSTER_NAME: $CLUSTER_NAME
+  before_script:
+    - apk add --no-cache python3 py3-pip && pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+    - awscli --version
+    - aws configure set aws_access_key_id $ACCESS_KEY
+    - aws configure set aws_secret_access_key $SECRET_ACCESS_KEY
+    - docker login -u $LOGIN -p $PASSWORD registry.gitlab.com
+  script:
+    - aws ecs update-service --region eu-central-1 --cluster $CLUSTER_NAME --service $CLUSTER_NAME desired_count 0
+    - docker build -t $CLUSTER_NAME:latest . -f Dockerfile
+    - docker rm $GITLABREPO:latest --force
+    - docker tag $CLUSTER_NAME:latest $GITLABREPO:latest
+    - docker push $GITLABREPO:latest
+    - aws ecs update-service --region eu-central-1 --cluster $CLUSTER_NAME --service $CLUSTER_NAME desired_count 1
+  allow_failure: false
+  only:
+    refs:
+      - branches
+    changes:
+      - /bot
+      - Dockerfile
+      - requirements.txt

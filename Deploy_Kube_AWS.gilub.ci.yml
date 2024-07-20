@@ -1,0 +1,27 @@
+stages:
+  - deploy
+
+deploy-job:
+  image:
+    name: alpine/helm:3.14.3
+    entrypoint:
+      - [""]
+  stage: deploy
+  variables:
+    IMAGE_VERSION: $CI_COMMIT_SHORT_SHA
+    PRIVATE_TOKEN: $PRIVATE_TOKEN
+    ACCESS_KEY: $AWS_ACCESS_KEY
+    SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+  before_script:
+    - apk add --no-cache python3 py3-pip && pip3 install --upgrade pip && pip3 install --no-cache-dir awscli && rm -rf /var/cache/apk/*
+    - awscli --version
+    - aws configure set aws_access_key_id $ACCESS_KEY
+    - aws configure set aws_secret_access_key $SECRET_ACCESS_KEY
+    - helm registry login -u $PRIVATE_TOKEN --password-stdin $CI_REGISTRY
+  script:
+    - helm repo add gitlab-registry  https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/packages/helm/stable
+    - aws eks update-kubeconfig --region eu-central-1 --name myCluster-prod
+    - helm update --install --set image.tag=$IMAGE_VERSION myApp gitlab-registry/app-{$CI_COMMIT_SHORT_SHA} --create-namespace production
+  only:
+    - main
+  when: manual
